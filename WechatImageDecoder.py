@@ -2,6 +2,36 @@
 # zhangxiaoyang.hit[at]gmail.com
 
 import re
+import os
+import argparse
+import logging
+import sys
+
+# # Set up logging
+# logging.basicConfig(
+#     filename='wechat_image_decoder.log',
+#     filemode='a',
+#     format='%(asctime)s - %(levelname)s - %(message)s',
+#     level=logging.INFO
+# )
+
+# Set up logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Create file handler for logging to file
+file_handler = logging.FileHandler('wechat_image_decoder.log')
+file_handler.setLevel(logging.INFO)
+file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(file_formatter)
+logger.addHandler(file_handler)
+
+# Create console handler for printing to console
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_formatter = logging.Formatter('%(message)s')
+console_handler.setFormatter(console_formatter)
+logger.addHandler(console_handler)
 
 class WechatImageDecoder:
     def __init__(self, dat_file):
@@ -23,13 +53,13 @@ class WechatImageDecoder:
         return decoders[None]
 
     def _decode_pc_dat(self, dat_file):
-        
+
         def do_magic(header_code, buf):
             return header_code ^ list(buf)[0] if buf else 0x00
-        
+
         def decode(magic, buf):
             return bytearray([b ^ magic for b in list(buf)])
-            
+
         def guess_encoding(buf):
             headers = {
                 'jpg': (0xff, 0xd8),
@@ -37,13 +67,13 @@ class WechatImageDecoder:
                 'gif': (0x47, 0x49),
             }
             for encoding in headers:
-                header_code, check_code = headers[encoding] 
+                header_code, check_code = headers[encoding]
                 magic = do_magic(header_code, buf)
                 _, code = decode(magic, buf[:2])
                 if check_code == code:
                     return (encoding, magic)
-            print('Decode failed')
-            sys.exit(1) 
+            logging.error('Decode failed')
+            sys.exit(1)
 
         with open(dat_file, 'rb') as f:
             buf = bytearray(f.read())
@@ -72,26 +102,54 @@ class WechatImageDecoder:
         raise Exception('Unknown file type')
 
 
-if __name__ == '__main__':
-    import sys
-    if len(sys.argv) != 2:
-        print('\n'.join([
-            'Usage:',
-            '  python WechatImageDecoder.py [dat_file]',
-            '',
-            'Example:',
-            '  # PC:',
-            '  python WechatImageDecoder.py 1234567890.dat',
-            '',
-            '  # Android:',
-            '  python WechatImageDecoder.py cache.data.10'
-        ]))
-        sys.exit(1)
+def process_single_file(file_path, delete_after_success=False)->int:
+    if not os.path.isfile(file_path):
+        logging.error(f"{file_path} is not a valid file.")
+        return 0
 
-    _,  dat_file = sys.argv[:2]
+    # check file extension is .dat, else skip
+    if file_path.endswith('.dat'):
+        try:
+            WechatImageDecoder(file_path)
+            logging.info(f"Decoded {file_path}")
+            if delete_after_success:
+                os.remove(file_path)
+                logging.info(f"Deleted {file_path}")
+            return 1
+        except Exception as e:
+            logging.error(f"Failed to decode {file_path}: {e}")
+            return 0
+
+
+def process_folder(folder_path, delete_after_success=False)->int:
+    if not os.path.isdir(folder_path):
+        logging.error(f"{folder_path} is not a valid directory.")
+        return 0
+
+    processed_file_num=0
     try:
-        WechatImageDecoder(dat_file)
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                dat_file = os.path.join(root, file)
+                n=process_single_file(dat_file, delete_after_success)
+                processed_file_num+=n
     except Exception as e:
-        print(e)
-        sys.exit(1)
-    sys.exit(0)
+        logging.error(e)
+
+    return processed_file_num
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Decode WeChat .dat files.', add_help=True)
+    parser.add_argument('path', type=str, help='Specify the file or folder path.')
+    parser.add_argument('-r', action='store_true', help='Recursively process files in the folder.')
+    parser.add_argument('-d', action='store_true', help='Delete original .dat file after successful conversion.')
+
+    args = parser.parse_args()
+
+    if args.r:
+        n=process_folder(args.path, delete_after_success=args.d)
+    else:
+        n=process_single_file(args.path, delete_after_success=args.d)
+    #
+    logger.info(f"Program exit with {n} files processed.")
