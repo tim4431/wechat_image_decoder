@@ -72,8 +72,9 @@ class WechatImageDecoder:
                 _, code = decode(magic, buf[:2])
                 if check_code == code:
                     return (encoding, magic)
-            logging.error('Decode failed')
-            sys.exit(1)
+            # logging.error('Decode failed, check_code is not equal to code')
+            # sys.exit(1)
+            raise Exception(f"check_code {check_code} is not equal to code {code}")
 
         with open(dat_file, 'rb') as f:
             buf = bytearray(f.read())
