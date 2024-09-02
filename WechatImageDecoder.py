@@ -119,6 +119,8 @@ def process_single_file(file_path, delete_after_success=False)->int:
         except Exception as e:
             logging.error(f"Failed to decode {file_path}: {e}")
             return 0
+    else:
+        return 0
 
 
 def process_folder(folder_path, delete_after_success=False)->int:

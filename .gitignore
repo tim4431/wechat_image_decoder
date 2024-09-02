@@ -2,3 +2,5 @@
 *.swp
 *.jpg
 *.dat
+/a
+*.log
